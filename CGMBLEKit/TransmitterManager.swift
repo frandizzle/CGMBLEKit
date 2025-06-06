@@ -57,6 +57,8 @@ public class TransmitterManager: TransmitterDelegate {
 
     private let observers = WeakSynchronizedSet<TransmitterManagerObserver>()
 
+    private var lastSuccessfulReadTime: Date? = nil
+
 
     public var hasValidSensorSession: Bool {
         // TODO: we should decode and persist transmitter session state
@@ -238,10 +240,15 @@ public class TransmitterManager: TransmitterDelegate {
         transmitter.resumeScanning()
 
         // If our last glucose was less than 4.5 minutes ago, don't fetch.
-        guard !dataIsFresh else {
-            completion(.noData)
-            return
-        }
+if dataIsFresh {
+    if let last = lastSuccessfulReadTime, abs(last.timeIntervalSinceNow) < 60 {
+        log.default("⏸ Skipping redundant noData CGM fetch: last successful read was within 60s")
+        return
+    } else {
+        completion(.noData)
+        return
+    }
+}
         
         if let latestReading = latestReading {
             log.default("Fetching new glucose from Share because last reading is %{public}.1f minutes old", latestReading.readDate.timeIntervalSinceNow.minutes)
@@ -352,6 +359,7 @@ public class TransmitterManager: TransmitterDelegate {
         }
 
         latestReading = glucose
+        lastSuccessfulReadTime = Date()
 
         logDeviceCommunication("New reading: \(glucose.readDate)", type: .receive)
 
